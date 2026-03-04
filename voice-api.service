@@ -1,0 +1,15 @@
+[Unit]
+Description=Biometric Voice Recognition API
+After=network.target
+
+[Service]
+Type=simple
+User=axlplay
+WorkingDirectory=/home/axlplay/projects/biometric-voice
+ExecStart=/home/axlplay/projects/biometric-voice/.venv/bin/uvicorn biometric_voice.api:app --host 0.0.0.0 --port 7098
+Restart=on-failure
+RestartSec=5
+Environment=PATH=/home/axlplay/projects/biometric-voice/.venv/bin:/usr/bin
+
+[Install]
+WantedBy=multi-user.target

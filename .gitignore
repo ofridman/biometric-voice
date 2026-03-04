@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+*.egg-info/
+dist/
+build/
+data/pretrained_models/
+data/embeddings.json
+data/enrolled_speakers/
+.venv/
+.env
