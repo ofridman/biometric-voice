@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+import os
+import secrets
 import tempfile
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Header, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 
 from biometric_voice.speaker import SpeakerVerifier
 from biometric_voice.challenge import ChallengeStore, Transcriber, phrase_matches
+
+API_KEY = os.environ.get("BIOMETRIC_API_KEY")
 
 app = FastAPI(title="Biometric Voice Recognition API")
 
@@ -21,6 +25,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+async def verify_api_key(x_api_key: str = Header(...)):
+    """Validate the X-API-Key header against the server's configured key."""
+    if API_KEY is None:
+        raise HTTPException(500, "Server API key not configured.")
+    if not secrets.compare_digest(x_api_key, API_KEY):
+        raise HTTPException(401, "Invalid API key.")
+
 
 verifier: Optional[SpeakerVerifier] = None
 transcriber: Optional[Transcriber] = None
@@ -50,7 +62,7 @@ async def _save_upload(upload: UploadFile) -> Path:
     return Path(tmp.name)
 
 
-@app.post("/enroll")
+@app.post("/enroll", dependencies=[Depends(verify_api_key)])
 async def enroll(
     name: str = Form(...),
     token: str = Form(...),
@@ -99,7 +111,7 @@ async def enroll(
     }
 
 
-@app.post("/verify")
+@app.post("/verify", dependencies=[Depends(verify_api_key)])
 async def verify(
     name: str = Form(...),
     audio: UploadFile = File(...),
@@ -116,7 +128,7 @@ async def verify(
     return {"match": match, "score": round(score, 4), "speaker": name}
 
 
-@app.post("/identify")
+@app.post("/identify", dependencies=[Depends(verify_api_key)])
 async def identify(
     audio: UploadFile = File(...),
     threshold: Optional[float] = Form(None),
@@ -132,18 +144,18 @@ async def identify(
     return {"speaker": name, "score": round(score, 4), "match": name is not None}
 
 
-@app.get("/speakers")
+@app.get("/speakers", dependencies=[Depends(verify_api_key)])
 async def list_speakers():
     return {"speakers": _get_verifier().list_speakers()}
 
 
-@app.get("/speakers/{name}/enrolled")
+@app.get("/speakers/{name}/enrolled", dependencies=[Depends(verify_api_key)])
 async def check_enrolled(name: str):
     enrolled = name in _get_verifier().list_speakers()
     return {"speaker": name, "enrolled": enrolled}
 
 
-@app.delete("/speakers/{name}")
+@app.delete("/speakers/{name}", dependencies=[Depends(verify_api_key)])
 async def remove_speaker(name: str):
     v = _get_verifier()
     if name not in v.list_speakers():
@@ -152,13 +164,13 @@ async def remove_speaker(name: str):
     return {"status": "ok", "removed": name}
 
 
-@app.post("/challenge")
+@app.post("/challenge", dependencies=[Depends(verify_api_key)])
 async def create_challenge():
     token, phrase = challenge_store.create()
     return {"token": token, "phrase": phrase}
 
 
-@app.post("/verify-challenge")
+@app.post("/verify-challenge", dependencies=[Depends(verify_api_key)])
 async def verify_challenge(
     name: str = Form(...),
     token: str = Form(...),
